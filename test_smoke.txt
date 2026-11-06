@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""
+Fast smoke tests for the Gompertz-obstruction repository.
+
+Verifies three base identities in about 30 seconds:
+  1. Aptekarev 2-term recurrence converges to δ.
+  2. CMF trajectory (1,-4)/(1,-1) matches L* = (-4+5δ)/(-4-δ).
+  3. Denominator formula v_p(B_100) = v_p(floor(100/2)!) for p = 3, 5, 7.
+
+If all three pass, the environment is set up correctly and the
+full scripts (which take minutes) can be run with confidence.
+
+Requires: mpmath, gmpy2  (pip install -r requirements.txt)
+"""
+
+import sys
+sys.set_int_max_str_digits(0)
+
+import mpmath as mp
+from fractions import Fraction
+
+# ---------- CONFIG ----------
+dps = 100
+# ----------------------------
+
+mp.mp.dps = dps
+delta = mp.e * mp.e1(1)
+
+print(f"Smoke tests for gompertz-obstruction")
+print(f"δ = {mp.nstr(delta, 30)}")
+print(f"dps = {dps}\n")
+
+
+# ==================================================================
+# Test 1: Aptekarev 2-term recurrence converges to δ
+# ==================================================================
+def test_aptekarev_2term():
+    p = [Fraction(0), Fraction(1)]
+    q = [Fraction(1), Fraction(2)]
+    for n in range(1, 100):
+        p.append(2*(n+1)*p[n] - n**2 * p[n-1])
+        q.append(2*(n+1)*q[n] - n**2 * q[n-1])
+
+    pn = mp.mpf(p[100].numerator) / mp.mpf(p[100].denominator)
+    qn = mp.mpf(q[100].numerator) / mp.mpf(q[100].denominator)
+    err = abs(pn / qn - delta)
+
+    assert err < mp.mpf('1e-10'), \
+        f"Aptekarev 2-term: |p/q - δ| = {err} > 1e-10"
+    return err
+
+
+# ==================================================================
+# Test 2: CMF trajectory matches L*
+# ==================================================================
+def test_cmf_trajectory():
+    L_star = (-4 + 5*delta) / (-4 - delta)
+
+    # Step matrix M_k = [[k, k], [1, k+5]], with periodic rescaling.
+    N = mp.matrix([[mp.mpf(1), mp.mpf(0)],
+                   [mp.mpf(0), mp.mpf(1)]])
+    for k in range(1, 200):
+        N = N * mp.matrix([[mp.mpf(k), mp.mpf(k)],
+                           [mp.mpf(1), mp.mpf(k + 5)]])
+        mx = max(abs(N[i, j]) for i in range(2) for j in range(2))
+        if mx > mp.mpf('1e50'):
+            for i in range(2):
+                for j in range(2):
+                    N[i, j] /= mx
+
+    Ln = N[0, 1] / N[1, 1]
+    err = abs(Ln - L_star)
+
+    assert err < mp.mpf('1e-20'), \
+        f"CMF trajectory: |L_n - L*| = {err} > 1e-20"
+    return err
+
+
+# ==================================================================
+# Test 3: Denominator formula v_p(B_100) = v_p(floor(100/2)!)
+# ==================================================================
+def test_denominator_formula():
+    try:
+        from gmpy2 import mpq, mpz, remove
+    except ImportError:
+        print("[SKIP] gmpy2 not available; test 3 skipped.")
+        return None
+
+    Q_prev, Q_curr = mpq(0, 1), mpq(1, 1)
+    one, two = mpq(1, 1), mpq(2, 1)
+    for k in range(1, 101):
+        c = one if k % 2 else two / k
+        Q_next = c * Q_curr + Q_prev
+        Q_prev, Q_curr = Q_curr, Q_next
+
+    B100 = mpz(Q_curr.denominator)
+
+    def vp_fact(n, p):
+        v = 0
+        while n > 0:
+            n //= p
+            v += n
+        return v
+
+    for p in [3, 5, 7]:
+        _, vb = remove(B100, p)
+        expected = vp_fact(50, p)
+        assert vb == expected, \
+            f"v_{p}(B_100) = {vb}, expected v_{p}(50!) = {expected}"
+
+    return True
+
+
+# ==================================================================
+# Run all tests
+# ==================================================================
+passed = 0
+failed = 0
+
+print("Running tests...\n")
+
+try:
+    err = test_aptekarev_2term()
+    print(f"[PASS] Test 1: Aptekarev 2-term  "
+          f"(|p/q - δ| = {mp.nstr(err, 4)})")
+    passed += 1
+except AssertionError as e:
+    print(f"[FAIL] Test 1: {e}")
+    failed += 1
+
+try:
+    err = test_cmf_trajectory()
+    print(f"[PASS] Test 2: CMF trajectory    "
+          f"(|L_n - L*| = {mp.nstr(err, 4)})")
+    passed += 1
+except AssertionError as e:
+    print(f"[FAIL] Test 2: {e}")
+    failed += 1
+
+try:
+    result = test_denominator_formula()
+    if result is None:
+        print("[SKIP] Test 3: Denominator formula (gmpy2 unavailable)")
+    else:
+        print("[PASS] Test 3: Denominator formula v_p(B_100) = v_p(50!)")
+        passed += 1
+except AssertionError as e:
+    print(f"[FAIL] Test 3: {e}")
+    failed += 1
+
+# ---------- Summary ----------
+print()
+print("=" * 60)
+if failed == 0:
+    print(f"All {passed} tests passed.")
+    print("Environment is set up correctly.")
+    print("You can now run:  make data  (full verification, ~30 min)")
+    sys.exit(0)
+else:
+    print(f"{failed} test(s) failed, {passed} passed.")
+    print("Check the errors above before running the full scripts.")
+    sys.exit(1)
