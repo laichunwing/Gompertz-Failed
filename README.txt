@@ -1,6 +1,6 @@
 # Obstruction to Irrationality Proofs for the Euler–Gompertz Constant
 
-Author: (your name)
+Author: Chun Wing Lai
 Status: Preprint (not peer-reviewed)
 
 ## Summary
@@ -130,14 +130,12 @@ cross-references.
 ## Citation
 
     @misc{author2026gompertz,
-      author = {(your name)},
+      author = {Chun Wing Lai},
       title  = {Why the {E}uler--{G}ompertz Constant Resists
                 Irrationality Proofs},
       year   = {2026},
-      note   = {Preprint, \url{https://github.com/USERNAME/gompertz-obstruction}}
+      note   = {Preprint, \url{https://github.com/laichunwing/Gompertz-Failed}}
     }
-
-Replace "USERNAME" with your GitHub username after publishing.
 
 ## License
 
